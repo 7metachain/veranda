@@ -1,0 +1,77 @@
+[package]
+name = "backend"
+version.workspace = true
+edition.workspace = true
+description = "Veranda HTTP backend (axum) + matching pipeline orchestrator"
+license.workspace = true
+
+[[bin]]
+name = "backend"
+path = "src/main.rs"
+
+[dependencies]
+# Solana / Anchor
+# Backend only needs Pubkey + Signature types from solana-sdk and anchor's
+# IDL types. Direct RPC is done via reqwest JSON-RPC. The token-related
+# CPIs all happen inside the on-chain program itself.
+anchor-lang = { workspace = true }
+solana-sdk = { workspace = true }
+# anchor-client = { workspace = true }   # see note above
+# solana-client = { workspace = true }   # see note above
+# spl-token / spl-associated-token-account: only needed by the on-chain
+# program, which has them in its own Cargo.toml.
+
+# In-workspace IDL types
+veranda-escrow = { path = "../programs/veranda-escrow", features = ["no-entrypoint"] }
+
+# MagicBlock / Light Protocol — see workspace Cargo.toml; left disabled
+# until version pinning aligns with anchor 0.30.1.
+# ephemeral-rollups-sdk = { workspace = true }
+# light-sdk = { workspace = true }
+# light-hasher = { workspace = true }
+
+# HTTP
+axum = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+reqwest = { workspace = true }
+
+# DB
+sqlx = { workspace = true }
+
+# Serde / utils
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+# LLM — rig-core stubbed; see services/llm.rs
+# rig-core = { workspace = true }
+
+# x402 — implemented inline in api/x402_middleware.rs; no crate dep needed
+# x402-axum = { workspace = true }
+
+# WS
+tokio-tungstenite = { workspace = true }
+futures-util = { workspace = true }
+
+# Crypto
+sha2 = { workspace = true }
+# Arkworks deps for off-chain Groth16 generation; stubbed until proof
+# pipeline is wired up.
+# ark-bn254 = { workspace = true }
+# ark-groth16 = { workspace = true }
+# ark-serialize = { workspace = true }
+# ark-ff = { workspace = true }
+# ark-ec = { workspace = true }
+
+base64 = "0.22"
+bs58 = "0.5"
+dotenvy = "0.15"
+once_cell = "1.19"
+async-trait = "0.1"

@@ -1,0 +1,51 @@
+# ─── Rust ───────────────────────────────────────────────────────────────────
+target/
+**/*.rs.bk
+Cargo.lock
+
+# ─── Anchor ────────────────────────────────────────────────────────────────
+.anchor/
+test-ledger/
+**/target/idl/
+**/target/types/
+
+# ─── Node / pnpm ───────────────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.next/
+out/
+dist/
+.turbo/
+
+# ─── Environment ───────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+keys/
+
+# ─── Circuits build artifacts ──────────────────────────────────────────────
+circuits/build/
+circuits/*.r1cs
+circuits/*.sym
+circuits/*.wasm
+circuits/*.zkey
+circuits/verification_key.json
+circuits/ptau/
+
+# ─── Editor ────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# ─── ROS / Gazebo ──────────────────────────────────────────────────────────
+ros-sim/recordings/
+*.mp4
+
+# ─── Mock data binary blobs (commit only headers) ──────────────────────────
+scripts/mock_data/*.wav
+!scripts/mock_data/.keep
+
+# ─── Logs ──────────────────────────────────────────────────────────────────
+*.log
+logs/

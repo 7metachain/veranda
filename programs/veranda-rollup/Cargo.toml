@@ -1,0 +1,22 @@
+[package]
+name = "veranda-rollup"
+version.workspace = true
+edition.workspace = true
+description = "Veranda MagicBlock Ephemeral Rollup program — high-frequency record_match"
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "veranda_rollup"
+
+[features]
+default = []
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+idl-build = ["anchor-lang/idl-build"]
+
+[dependencies]
+anchor-lang = { workspace = true }
+# ephemeral-rollups-sdk = { workspace = true }   # TODO: re-enable, see workspace Cargo.toml

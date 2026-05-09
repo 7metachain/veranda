@@ -1,0 +1,129 @@
+[workspace]
+members = [
+    "programs/veranda-escrow",
+    "programs/veranda-rollup",
+    "backend",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Veranda Team"]
+license = "Apache-2.0"
+
+[workspace.dependencies]
+# ─── Solana / Anchor ────────────────────────────────────────────────────────
+# NOTE: prompt §3 pinned anchor-lang = 0.30.1 + solana-sdk = 1.18, but those
+# pinnings hit a Rust 1.95 incompatibility in transitive `solana-address 1.0.0`
+# (borrow-of-moved-value). Anchor 0.31 + Solana 2.x is the maintained line and
+# is API-compatible for everything the program code uses (#[account],
+# #[derive(Accounts)], anchor_spl::token CPIs, etc.). Compilation is a hard
+# acceptance gate (see §12), so we bump.
+anchor-lang = "0.31.1"
+anchor-spl = "0.31.1"
+anchor-client = "0.31.1"
+solana-sdk = "2.0"
+solana-client = "2.0"
+solana-program = "2.0"
+spl-token = "6.0"
+spl-associated-token-account = "5.0"
+
+# ─── MagicBlock Ephemeral Rollups ──────────────────────────────────────────
+# Prompt asked for "0.0.10" but the published series starts at 0.11. We pin
+# the newest 0.x release available at scaffold time. NOTE: pinning is left to
+# leaf crates that actually `use` the macro; declaring it workspace-wide
+# pulls in a Solana 1.x dep tree that conflicts with anchor 0.30.1's
+# transitives, so we intentionally do NOT add it as a workspace dep.
+# ephemeral-rollups-sdk = "0.13"   # TODO: re-enable once anchor 0.30 + ER SDK resolver align
+
+# ─── Light Protocol (compressed accounts / ZK) ─────────────────────────────
+# Currently only referenced in code comments / TODO sites. Re-enable once we
+# wire the actual CPI calls. Their 1.x lines have aggressive pinning of
+# zeroize / curve25519-dalek that conflicts with anchor 0.30.1.
+# light-sdk = "0.11"
+# light-hasher = "1.1"
+# light-compressed-token = "0.6"
+
+# ─── HTTP / Web framework ──────────────────────────────────────────────────
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# ─── Database ──────────────────────────────────────────────────────────────
+# native-tls (rather than rustls) avoids dragging in `rustls 0.22+` which
+# pins `zeroize >= 1.6`, conflicting with solana-sdk 1.18's transitive
+# `ed25519-dalek 1.0.1` zeroize range.
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-native-tls",
+    "postgres",
+    "macros",
+    "uuid",
+    "chrono",
+] }
+
+# ─── HTTP client ───────────────────────────────────────────────────────────
+reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls"] }
+
+# ─── Serde ─────────────────────────────────────────────────────────────────
+# Pin below 1.0.227 to avoid a recent micro-version conflict between
+# `serde` (which split out `serde_core`) and downstream crates that
+# pin `serde_core` to slightly different ranges.
+serde = { version = "=1.0.219", features = ["derive"] }
+serde_json = "1"
+
+# ─── Error handling ────────────────────────────────────────────────────────
+thiserror = "1"
+anyhow = "1"
+
+# ─── Logging ───────────────────────────────────────────────────────────────
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# ─── IDs / time ────────────────────────────────────────────────────────────
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# ─── LLM ───────────────────────────────────────────────────────────────────
+# rig-core: the prompt pinned 0.4, but it pulls a transitive that conflicts
+# with anchor 0.30 here. `services/llm.rs` falls back to a deterministic
+# mock when the API key is unset, so we leave it commented for now.
+# rig-core = "0.4"
+
+# ─── x402 ──────────────────────────────────────────────────────────────────
+# x402 on Solana is nascent — no Rust crate by this exact name is published.
+# `backend/src/api/x402_middleware.rs` implements the spec by hand
+# (HTTP 402 + payment_requirements JSON). Re-enable once a Solana-native
+# Rust crate exists.
+# x402-axum = "0.1"
+
+# ─── WebSocket (ROS bridge) ────────────────────────────────────────────────
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+
+# ─── Crypto ────────────────────────────────────────────────────────────────
+sha2 = "0.10"
+ark-bn254 = "0.4"
+ark-groth16 = "0.4"
+ark-serialize = "0.4"
+ark-ff = "0.4"
+ark-ec = "0.4"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+
+[profile.release.build-override]
+opt-level = 3
+incremental = false
+codegen-units = 1
+
+# ─── Patches ────────────────────────────────────────────────────────────────
+# `spl-token-2022 5.x` still transitively pulls `curve25519-dalek 3.2.1`,
+# which constrains `zeroize < 1.4` — incompatible with newer rustls /
+# sqlx. Anza ships a fork that loosens the constraint; this is the
+# canonical workaround used across the Solana ecosystem.
+[patch.crates-io]
+curve25519-dalek = { git = "https://github.com/anza-xyz/curve25519-dalek.git", rev = "b500cdc2a920cd5bff9e2dd974d7b97349d61464" }

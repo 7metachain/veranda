@@ -1,0 +1,26 @@
+{
+  "name": "veranda",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Veranda — privacy-preserving dating on Solana",
+  "scripts": {
+    "dev:frontend": "pnpm --filter frontend dev",
+    "build:frontend": "pnpm --filter frontend build",
+    "build:anchor": "anchor build",
+    "build:backend": "cargo build --release -p backend",
+    "build": "pnpm build:anchor && pnpm build:backend && pnpm build:frontend",
+    "test:anchor": "anchor test",
+    "test:backend": "cargo test -p backend",
+    "test:frontend": "pnpm --filter frontend test",
+    "test": "pnpm test:anchor && pnpm test:backend && pnpm test:frontend",
+    "deploy:devnet": "bash scripts/deploy_devnet.sh",
+    "demo": "bash scripts/run_demo.sh",
+    "seed": "tsx scripts/seed_demo_data.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.5",
+    "@types/node": "^20.12.0"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

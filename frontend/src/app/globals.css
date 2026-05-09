@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --veranda-ink: #0e0b16;
+  --veranda-fog: #f7f5ee;
+}
+
+html, body {
+  background: var(--veranda-fog);
+  color: var(--veranda-ink);
+}

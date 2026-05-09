@@ -1,0 +1,14 @@
+{
+  "name": "veranda-circuits",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "compile": "bash scripts/compile.sh",
+    "setup": "bash scripts/trusted_setup.sh"
+  },
+  "dependencies": {
+    "circomlib": "^2.0.5",
+    "circomlibjs": "^0.1.7",
+    "snarkjs": "^0.7.4"
+  }
+}

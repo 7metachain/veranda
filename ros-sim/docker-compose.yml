@@ -1,0 +1,50 @@
+version: "3.8"
+services:
+  gazebo:
+    image: osrf/ros:humble-desktop-full
+    container_name: veranda_gazebo
+    environment:
+      - TURTLEBOT3_MODEL=burger
+      - DISPLAY=${DISPLAY:-host.docker.internal:0}
+    volumes:
+      - ./world:/world:ro
+      - ./scripts:/scripts:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+               ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py"
+    ports:
+      - "11345:11345"
+    networks:
+      - verandanet
+
+  rosbridge:
+    image: osrf/ros:humble-desktop-full
+    container_name: veranda_rosbridge
+    depends_on:
+      - gazebo
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+               ros2 launch rosbridge_server rosbridge_websocket_launch.xml"
+    ports:
+      - "9090:9090"
+    networks:
+      - verandanet
+
+  pickup_flower:
+    image: osrf/ros:humble-desktop-full
+    container_name: veranda_pickup_flower
+    depends_on:
+      - gazebo
+      - rosbridge
+    volumes:
+      - ./scripts:/scripts:ro
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+               python3 /scripts/pickup_flower.py"
+    networks:
+      - verandanet
+
+networks:
+  verandanet:
+    driver: bridge

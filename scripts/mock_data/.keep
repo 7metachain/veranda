@@ -1,0 +1,9 @@
+Place mock recordings here:
+  alice_meal.wav
+  alice_work.wav
+  alice_family.wav
+  alice_conflict.wav
+  alice_travel.wav
+
+The seeder uses only the file names — actual audio bytes aren't required
+for the demo flow.
