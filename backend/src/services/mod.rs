@@ -1,5 +1,6 @@
 pub mod arcium_stub;
 pub mod lifi;
+pub mod privy;
 pub mod light_protocol;
 pub mod llm;
 pub mod magicblock;

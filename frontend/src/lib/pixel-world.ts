@@ -129,30 +129,122 @@ export const COMMENTARY = [
   'Passed the "3am call" test',
 ];
 
+// Real-person English names. Used for both your agent's "scene-mate" labels
+// and global match-stream entries. Kept intentionally common/easy-to-read so
+// the demo feels human, not robotic.
 const FIRST_NAMES = [
+  "Emma",
+  "Liam",
+  "Sophia",
+  "Noah",
+  "Olivia",
+  "Ethan",
+  "Ava",
+  "Lucas",
+  "Mia",
+  "Mason",
+  "Isabella",
+  "Logan",
+  "Amelia",
+  "James",
+  "Harper",
+  "Benjamin",
+  "Evelyn",
+  "Henry",
+  "Charlotte",
+  "Alexander",
+  "Abigail",
+  "Daniel",
+  "Emily",
+  "Michael",
+  "Elizabeth",
+  "Jackson",
+  "Sofia",
+  "Sebastian",
+  "Avery",
+  "Aiden",
+  "Ella",
+  "Matthew",
+  "Madison",
+  "Samuel",
+  "Scarlett",
+  "David",
+  "Victoria",
+  "Joseph",
   "Aria",
-  "Neo",
-  "Zara",
-  "Kai",
-  "Luna",
-  "Orion",
-  "Sage",
-  "Vex",
-  "Nova",
-  "Echo",
-  "Riven",
-  "Flux",
-  "Lyra",
-  "Axon",
-  "Helix",
-  "Byte",
-  "Pixel",
-  "Sigma",
-  "Delta",
-  "Theta",
+  "Carter",
+  "Grace",
+  "Owen",
+  "Chloe",
+  "Wyatt",
+  "Camila",
+  "John",
+  "Penelope",
+  "Jack",
+  "Layla",
+  "Luke",
 ];
 
-const NAME_SUFFIXES = [".exe", "-X", "-α", "-7", "-3K", "++", "v2", ".ai"];
+const LAST_NAMES = [
+  "Smith",
+  "Johnson",
+  "Williams",
+  "Brown",
+  "Jones",
+  "Garcia",
+  "Miller",
+  "Davis",
+  "Rodriguez",
+  "Martinez",
+  "Hernandez",
+  "Lopez",
+  "Gonzalez",
+  "Wilson",
+  "Anderson",
+  "Thomas",
+  "Taylor",
+  "Moore",
+  "Jackson",
+  "Martin",
+  "Lee",
+  "Perez",
+  "Thompson",
+  "White",
+  "Harris",
+  "Sanchez",
+  "Clark",
+  "Ramirez",
+  "Lewis",
+  "Robinson",
+  "Walker",
+  "Young",
+  "Allen",
+  "King",
+  "Wright",
+  "Scott",
+  "Torres",
+  "Nguyen",
+  "Hill",
+  "Flores",
+  "Green",
+  "Adams",
+  "Nelson",
+  "Baker",
+  "Hall",
+  "Rivera",
+  "Campbell",
+  "Mitchell",
+  "Carter",
+  "Roberts",
+];
+
+function generatePersonName(seed: number): string {
+  const first = FIRST_NAMES[seed % FIRST_NAMES.length]!;
+  const last = LAST_NAMES[(seed * 31 + 7) % LAST_NAMES.length]!;
+  // Use last-initial style ~30% of the time so the feed has rhythm:
+  // "Emma S." / "Olivia Brown" / "Liam G." mixed together.
+  return seed % 3 === 0 ? `${first} ${last[0]}.` : `${first} ${last}`;
+}
 
 export type AgentTraits = {
   logic: number;
@@ -177,6 +269,11 @@ export type Agent = {
   score: number;
   meetCount: number;
   traits: AgentTraits;
+  /** Set when the agent enters the "matched" state — used so heart-clicks
+   *  on the canvas can pop a reason card without joining the events list. */
+  lastFact?: string;
+  lastCommentary?: string;
+  lastEventId?: number;
 };
 
 export type MatchEvent = {
@@ -211,9 +308,7 @@ export function makeAgent(opts: {
     id: isMe ? 0 : _uid++,
     isMe,
     type: t,
-    name: isMe
-      ? "Your Agent"
-      : `${FIRST_NAMES[_uid % FIRST_NAMES.length]}${pick(NAME_SUFFIXES)}`,
+    name: isMe ? "Your Agent" : generatePersonName(_uid),
     x: isMe ? width / 2 : 20 + Math.random() * (width - 40),
     y: isMe ? height / 2 : 20 + Math.random() * (height - 40),
     dx: Math.cos(ang) * spd,
@@ -265,8 +360,8 @@ export function rndMatchEvent(): MatchEvent {
   if (B === A) B = AGENT_TYPES[(A.id + 1) % AGENT_TYPES.length]!;
   return {
     id: Math.random(),
-    a: `${pick(FIRST_NAMES)}${pick(NAME_SUFFIXES)}`,
-    b: `${pick(FIRST_NAMES)}${pick(NAME_SUFFIXES)}`,
+    a: generatePersonName(r(10000)),
+    b: generatePersonName(r(10000) + 7),
     colorA: A.color,
     colorB: B.color,
     typeA: A.name,

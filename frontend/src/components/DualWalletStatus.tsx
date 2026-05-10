@@ -10,22 +10,37 @@ export function DualWalletStatus() {
 }
 
 function WithPrivy() {
-  // Dynamically `require` privy hooks only when we know the provider is mounted.
-  // (We can't conditionally `useState` inside one component, so we split.)
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { usePrivy, useWallets } = require("@privy-io/react-auth");
   const { user } = usePrivy();
   const { wallets } = useWallets();
   const [agent, setAgent] = useState<string | null>(null);
+  const [cachedReal, setCachedReal] = useState<string | null>(null);
 
-  const real =
-    wallets.find((w: any) => w.walletClientType === "privy")?.address ??
+  const fromWallets =
+    wallets.find((w: { address?: string }) => w.address)?.address ??
     user?.wallet?.address ??
     null;
 
   useEffect(() => {
     getOrCreateAgentWallet().then((w) => setAgent(w.publicKey));
   }, []);
+
+  useEffect(() => {
+    const read = () => {
+      try {
+        const v = localStorage.getItem("veranda:real_wallet");
+        setCachedReal(v && v.length > 20 ? v : null);
+      } catch {
+        setCachedReal(null);
+      }
+    };
+    read();
+    window.addEventListener("veranda:session", read);
+    return () => window.removeEventListener("veranda:session", read);
+  }, []);
+
+  const real = fromWallets ?? cachedReal;
 
   return <Pills real={real} agent={agent} />;
 }

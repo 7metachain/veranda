@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Area,
@@ -14,32 +14,19 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import {
-  GHOST_NORMAL,
-  GHOST_WINK,
-  drawGhost,
-} from "@/components/pixel/PixelGhost";
 import { PixelButton } from "@/components/pixel/PixelUI";
+import { PixelWorldCanvas } from "@/components/pixel/PixelWorldCanvas";
 import {
   AGENT_TYPES,
-  COMMENTARY,
   COMPAT_FACTS,
+  COMMENTARY,
   PIXEL_COLORS as C,
   type Agent,
   type MatchEvent,
-  compat,
   initCompatDistribution,
-  makeAgent,
 } from "@/lib/pixel-world";
 import { api } from "@/lib/api";
 import { getOrCreateAgentWallet } from "@/lib/agent-wallet";
-
-const CW = 720;
-const CH = 420;
-const N = 75;
-const TICK = 100;
-const MATCH_LIFE = 35;
-const MY_ID = 0;
 
 type Tab = "god" | "feed" | "dash";
 type Stats = {
@@ -50,17 +37,31 @@ type Stats = {
   rateHistory: { rate: number }[];
 };
 
-const r = (n = 100) => Math.floor(Math.random() * n);
-const pick = <T,>(arr: readonly T[]): T => arr[r(arr.length)] as T;
+/** A high-scoring match involving the user's agent — surfaced live as
+ *  shareable "top matches" so the user can jump to /candidates the
+ *  moment one is ready, without waiting for the round to finish. */
+export type TopMatch = {
+  id: number;
+  name: string;
+  typeName: string;
+  color: string;
+  score: number;
+  fact: string;
+  commentary: string;
+  ts: number;
+};
+
+const TOP_THRESHOLD = 78;
+const TOP_LIMIT = 15;
 
 export default function MatchingPage() {
   const [tab, setTab] = useState<Tab>("god");
-  const [agents, setAgents] = useState<Agent[]>(() => {
-    const arr = [makeAgent({ isMe: true, width: CW, height: CH })];
-    for (let i = 1; i < N; i++)
-      arr.push(makeAgent({ isMe: false, width: CW, height: CH }));
-    return arr;
-  });
+  // Live world state — populated by PixelWorldCanvas via onTick.
+  // We deliberately do NOT run our own simulation tick here anymore;
+  // the canvas component owns the world (same component used on the
+  // landing page) so the visual is identical and the "ghosts smearing
+  // into vertical bars" bug is gone.
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [stats, setStats] = useState<Stats>({
     matched: 0,
@@ -70,8 +71,23 @@ export default function MatchingPage() {
     rateHistory: Array.from({ length: 24 }, () => ({ rate: 0 })),
   });
   const [dist] = useState(initCompatDistribution);
-  const tickRef = useRef(0);
-  const accRef = useRef({ matched: 0, scoreSum: 0, progress: 12.3 });
+
+  // Track which match-event IDs we've already processed so the same
+  // tick doesn't re-fire setEvents on every animation frame.
+  const seenEventIds = useRef<Set<number>>(new Set());
+  const rateHistoryRef = useRef<{ rate: number }[]>(
+    Array.from({ length: 24 }, () => ({ rate: 0 })),
+  );
+  // Throttle the heavyweight react updates — onTick fires at rAF
+  // (~60fps) but the world only matters at sim cadence (~10fps).
+  const lastUpdateRef = useRef(0);
+
+  // Live top matches (your-agent only, score ≥ threshold). Surfaced
+  // through the floating notification + persisted so /candidates can
+  // render partial results without waiting for the round to finish.
+  const [topMatches, setTopMatches] = useState<TopMatch[]>([]);
+  const [showTopList, setShowTopList] = useState(false);
+  const [reason, setReason] = useState<MatchEvent | null>(null);
 
   // Backend session bootstrap (best-effort).
   const [sessionId, setSessionId] = useState<string>(
@@ -93,130 +109,88 @@ export default function MatchingPage() {
     };
   }, []);
 
-  // simulation tick
-  useEffect(() => {
-    const id = setInterval(() => {
-      const t = ++tickRef.current;
-      setAgents((prev) => {
-        let next = prev.map((a) => {
-          if (a.state === "matched" && t - a.matchTick > MATCH_LIFE) {
-            const ang = Math.random() * Math.PI * 2;
-            const spd = a.isMe ? 0.8 : 1.3;
-            return {
-              ...a,
-              state: "wander" as const,
-              matchId: null,
-              score: 0,
-              dx: Math.cos(ang) * spd,
-              dy: Math.sin(ang) * spd,
-            };
-          }
-          if (a.state === "matched") return a;
-          let { x, y, dx, dy } = a;
-          x += dx;
-          y += dy;
-          if (x < 16 || x > CW - 16) {
-            dx = -dx;
-            x = Math.max(16, Math.min(CW - 16, x));
-          }
-          if (y < 16 || y > CH - 16) {
-            dy = -dy;
-            y = Math.max(16, Math.min(CH - 16, y));
-          }
-          if (Math.random() < 0.015) {
-            const ang = Math.random() * Math.PI * 2;
-            const spd = a.isMe ? 0.8 : 1.3;
-            dx = Math.cos(ang) * spd;
-            dy = Math.sin(ang) * spd;
-          }
-          return { ...a, x, y, dx, dy };
-        });
+  // PixelWorldCanvas snapshot consumer. Diff-and-merge on each tick.
+  const handleTick = useCallback(
+    (snap: {
+      agents: Agent[];
+      events: MatchEvent[];
+      stats: { matched: number; round: number; progress: number; avgScore: number };
+      myAgent: Agent | undefined;
+    }) => {
+      // Throttle: only react-update every ~150ms.
+      const now = Date.now();
+      if (now - lastUpdateRef.current < 150) return;
+      lastUpdateRef.current = now;
 
-        if (t % 5 === 0) {
-          const w = next.filter((a) => a.state === "wander");
-          if (w.length >= 2) {
-            let A: Agent | undefined;
-            let B: Agent | undefined;
-            const me = w.find((a) => a.isMe);
-            if (me && Math.random() < 0.3) {
-              A = me;
-              const others = w.filter((a) => !a.isMe);
-              B = pick(others);
-            } else {
-              const ai = r(w.length);
-              let bi = ai;
-              while (bi === ai) bi = r(w.length);
-              A = w[ai];
-              B = w[bi];
-            }
-            if (A && B) {
-              const sc = compat(A, B);
-              const isMyMatch = A.isMe || B.isMe;
-              const ev: MatchEvent = {
-                id: t,
-                a: A.name,
-                b: B.name,
-                colorA: A.type.color,
-                colorB: B.type.color,
-                typeA: A.type.name,
-                typeB: B.type.name,
-                score: sc,
-                isMyAgent: isMyMatch,
-                fact: pick(COMPAT_FACTS),
-                commentary: pick(COMMENTARY),
-              };
-              setEvents((prevEv) => [ev, ...prevEv.slice(0, 39)]);
-              accRef.current.matched++;
-              accRef.current.scoreSum += sc;
-              accRef.current.progress = Math.min(
-                100,
-                12.3 + accRef.current.matched * 0.4,
-              );
-              setStats((prev) => ({
-                ...prev,
-                matched: accRef.current.matched,
-                avgScore: Math.round(
-                  accRef.current.scoreSum / accRef.current.matched,
-                ),
-                progress: accRef.current.progress,
-                round:
-                  accRef.current.progress >= 50 ? 2 : 1,
-                rateHistory: [
-                  ...prev.rateHistory.slice(1),
-                  { rate: accRef.current.matched },
-                ],
-              }));
-              next = next.map((a) => {
-                if (a.id === A!.id)
-                  return {
-                    ...a,
-                    state: "matched" as const,
-                    matchId: B!.id,
-                    matchTick: t,
-                    score: sc,
-                    meetCount: a.meetCount + (a.isMe ? 1 : 0),
-                  };
-                if (a.id === B!.id)
-                  return {
-                    ...a,
-                    state: "matched" as const,
-                    matchId: A!.id,
-                    matchTick: t,
-                    score: sc,
-                    meetCount: a.meetCount + (a.isMe ? 1 : 0),
-                  };
-                return a;
-              });
-            }
-          }
+      setAgents(snap.agents);
+
+      // Pick out events we haven't seen yet (events come in newest-first).
+      const fresh: MatchEvent[] = [];
+      for (const ev of snap.events) {
+        if (seenEventIds.current.has(ev.id)) break;
+        fresh.push(ev);
+      }
+      if (fresh.length) {
+        for (const ev of fresh) seenEventIds.current.add(ev.id);
+        setEvents((prev) => [...fresh, ...prev].slice(0, 60));
+
+        // Surface high-scoring "your-agent" matches as top matches.
+        const newTops: TopMatch[] = [];
+        for (const ev of fresh) {
+          if (!ev.isMyAgent || ev.score < TOP_THRESHOLD) continue;
+          // Pick the side that ISN'T "Your Agent" as the candidate.
+          const candidateName =
+            ev.a === "Your Agent" ? ev.b : ev.b === "Your Agent" ? ev.a : ev.b;
+          const candidateType =
+            ev.a === "Your Agent" ? ev.typeB : ev.b === "Your Agent" ? ev.typeA : ev.typeB;
+          const candidateColor =
+            ev.a === "Your Agent" ? ev.colorB : ev.b === "Your Agent" ? ev.colorA : ev.colorB;
+          newTops.push({
+            id: ev.id,
+            name: candidateName,
+            typeName: candidateType,
+            color: candidateColor,
+            score: ev.score,
+            fact: ev.fact,
+            commentary: ev.commentary,
+            ts: Date.now(),
+          });
         }
-        return next;
-      });
-    }, TICK);
-    return () => clearInterval(id);
-  }, []);
+        if (newTops.length) {
+          setTopMatches((prev) => {
+            const merged = [...newTops, ...prev]
+              .sort((x, y) => y.score - x.score)
+              .slice(0, TOP_LIMIT);
+            try {
+              localStorage.setItem(
+                "veranda:top_matches",
+                JSON.stringify(merged),
+              );
+            } catch {
+              /* ignore */
+            }
+            return merged;
+          });
+        }
+      }
 
-  const myAgent = agents.find((a) => a.isMe);
+      // Stats + rolling rate history.
+      rateHistoryRef.current = [
+        ...rateHistoryRef.current.slice(1),
+        { rate: snap.stats.matched },
+      ];
+      setStats({
+        matched: snap.stats.matched,
+        round: snap.stats.round,
+        progress: snap.stats.progress,
+        avgScore: snap.stats.avgScore,
+        rateHistory: rateHistoryRef.current,
+      });
+    },
+    [],
+  );
+
+  const myAgent = useMemo(() => agents.find((a) => a.isMe), [agents]);
   const isComplete = stats.progress >= 100;
 
   return (
@@ -275,74 +249,220 @@ export default function MatchingPage() {
       </header>
 
       {/* CONTENT */}
-      {tab === "god" && (
-        <GodView
-          agents={agents}
-          events={events}
-          stats={stats}
-          myAgent={myAgent}
-        />
-      )}
-      {tab === "feed" && <LiveFeed events={events} myAgent={myAgent} />}
-      {tab === "dash" && (
-        <Dashboard stats={stats} dist={dist} events={events} />
+      {/* The PixelWorldCanvas mounts ONCE and stays mounted regardless
+          of the active tab — switching to LIVE FEED / DASHBOARD just
+          hides it visually. This keeps the world running without
+          remounting (which would reset agent positions and look weird
+          when the user toggles back). */}
+      <div style={{ height: "calc(100vh - 64px)" }}>
+        <div
+          className="grid grid-cols-1 lg:grid-cols-[1fr_300px] h-full"
+          style={{ display: tab === "god" ? "grid" : "none" }}
+        >
+          <GodView
+            myAgent={myAgent}
+            events={events}
+            stats={stats}
+            agents={agents}
+            onSelectReason={setReason}
+            onTick={handleTick}
+          />
+        </div>
+        {tab === "feed" && (
+          <LiveFeed
+            events={events}
+            myAgent={myAgent}
+            onSelectReason={setReason}
+          />
+        )}
+        {tab === "dash" && (
+          <Dashboard stats={stats} dist={dist} events={events} />
+        )}
+      </div>
+
+      {/* LIVE TOP-MATCHES NOTIFICATION */}
+      {topMatches.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2">
+          {showTopList && (
+            <div className="w-80 max-h-96 overflow-y-auto bg-pixel-bg2 border border-pixel-border rounded shadow-pixel-glow">
+              <div className="px-3 py-2 border-b border-pixel-border flex items-center justify-between">
+                <span className="font-mono text-[9px] tracking-[0.3em] text-pixel-gold">
+                  ── LIVE TOP MATCHES ──
+                </span>
+                <button
+                  onClick={() => setShowTopList(false)}
+                  className="font-mono text-[10px] text-pixel-dim hover:text-pixel-orange"
+                >
+                  ✕
+                </button>
+              </div>
+              {topMatches.map((tm, i) => (
+                <div
+                  key={tm.id}
+                  className="px-3 py-2 border-b border-[#130908] flex items-center justify-between"
+                >
+                  <div>
+                    <div
+                      className="font-mono text-[10px] font-bold"
+                      style={{ color: tm.color }}
+                    >
+                      #{String(i + 1).padStart(2, "0")} · {tm.name}
+                    </div>
+                    <div className="font-mono text-[8px] text-pixel-dim italic">
+                      "{tm.fact}"
+                    </div>
+                  </div>
+                  <span
+                    className="font-mono text-[11px] font-bold"
+                    style={{
+                      color:
+                        tm.score >= 90
+                          ? C.green
+                          : tm.score >= 80
+                            ? C.gold
+                            : C.orange,
+                    }}
+                  >
+                    {tm.score}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowTopList((v) => !v)}
+              className="relative bg-pixel-bg2 border border-pixel-border rounded px-3 py-2 font-mono text-[10px] text-pixel-gold hover:bg-pixel-bg2/80 transition"
+            >
+              {showTopList ? "Hide" : "Live"} top matches
+              <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 bg-pixel-pink text-pixel-bg rounded-full font-mono text-[9px] font-bold flex items-center justify-center animate-livePulse">
+                {topMatches.length}
+              </span>
+            </button>
+            <Link href={`/candidates?session=${sessionId}`}>
+              <PixelButton>
+                {isComplete ? "See your top 10 →" : "Open top matches →"}
+              </PixelButton>
+            </Link>
+          </div>
+        </div>
       )}
 
-      {/* CTA when complete */}
-      {isComplete && (
+      {isComplete && topMatches.length === 0 && (
         <div className="fixed bottom-6 right-6">
           <Link href={`/candidates?session=${sessionId}`}>
             <PixelButton>See your top 10 →</PixelButton>
           </Link>
         </div>
       )}
+
+      {reason && <ReasonModal ev={reason} onClose={() => setReason(null)} />}
     </div>
   );
 }
 
-/* ───────────────────── GOD VIEW ───────────────────── */
+/* ───────────────────── GOD VIEW ─────────────────────
+   The world canvas is now PixelWorldCanvas — same component used on
+   the landing page — so the ghosts behave exactly like /. The
+   sidebar list still works as before; clicking any row pops the
+   reason modal. */
 function GodView({
-  agents,
+  myAgent,
   events,
   stats,
-  myAgent,
+  agents,
+  onSelectReason,
+  onTick,
 }: {
-  agents: Agent[];
+  myAgent: Agent | undefined;
   events: MatchEvent[];
   stats: Stats;
-  myAgent: Agent | undefined;
+  agents: Agent[];
+  onSelectReason: (ev: MatchEvent) => void;
+  onTick: (snap: {
+    agents: Agent[];
+    events: MatchEvent[];
+    stats: { matched: number; round: number; progress: number; avgScore: number };
+    myAgent: Agent | undefined;
+  }) => void;
 }) {
-  const cvs = useRef<HTMLCanvasElement | null>(null);
-  const aRef = useRef(agents);
-  const fRef = useRef(0);
-  const rafRef = useRef<number | null>(null);
+  // Click anywhere on the world: hit-test against the live agent
+  // positions to find a "heart" (mid-point of a matched pair) close
+  // to the click, then surface the reason for that pair.
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const canvas = wrap.querySelector("canvas");
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    // Internal canvas size matches what PixelWorldCanvas was given.
+    const CW_INTERNAL = canvas.width;
+    const CH_INTERNAL = canvas.height;
+    const cx = ((e.clientX - rect.left) / rect.width) * CW_INTERNAL;
+    const cy = ((e.clientY - rect.top) / rect.height) * CH_INTERNAL;
 
-  useEffect(() => {
-    aRef.current = agents;
-  });
-
-  useEffect(() => {
-    const ctx = cvs.current?.getContext("2d");
-    if (!ctx) return;
-    const loop = () => {
-      drawWorld(ctx, aRef.current, fRef.current++);
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
+    const seen = new Set<number>();
+    let hit: { dist: number; A: Agent; B: Agent } | null = null;
+    for (const a of agents) {
+      if (a.state !== "matched" || a.matchId == null || seen.has(a.id)) continue;
+      const b = agents.find((x) => x.id === a.matchId);
+      if (!b) continue;
+      seen.add(a.id);
+      seen.add(b.id);
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      const d = Math.hypot(mx - cx, my - cy);
+      if (d <= 22 && (!hit || d < hit.dist)) hit = { dist: d, A: a, B: b };
+    }
+    if (!hit) return;
+    const { A, B } = hit;
+    // Look up the most recent event involving this exact pair so we
+    // can show the same fact/commentary the sidebar already showed.
+    const pairEv = events.find(
+      (ev) =>
+        (ev.a === A.name && ev.b === B.name) ||
+        (ev.a === B.name && ev.b === A.name),
+    );
+    onSelectReason(
+      pairEv ?? {
+        id: Math.random(),
+        a: A.name,
+        b: B.name,
+        colorA: A.type.color,
+        colorB: B.type.color,
+        typeA: A.type.name,
+        typeB: B.type.name,
+        score: A.score,
+        isMyAgent: A.isMe || B.isMe,
+        fact: COMPAT_FACTS[0]!,
+        commentary: COMMENTARY[0]!,
+      },
+    );
+  };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px]" style={{ height: "calc(100vh - 64px)" }}>
-      <div className="relative overflow-hidden border-r border-pixel-border">
-        <canvas
-          ref={cvs}
-          width={CW}
-          height={CH}
-          className="block w-full h-full pixelated"
-        />
+    <>
+      <div
+        className="relative overflow-hidden border-r border-pixel-border"
+        ref={wrapRef}
+        onClick={handleClick}
+        style={{ cursor: "crosshair" }}
+        title="Click any heart to see why these agents matched"
+      >
+        <div className="absolute inset-0">
+          <PixelWorldCanvas
+            width={720}
+            height={420}
+            agentCount={75}
+            showLegend={false}
+            showStatus={false}
+            showLiveBadge={false}
+            className="w-full h-full !rounded-none !border-0"
+            onTick={onTick}
+          />
+        </div>
         <Badge
           className="top-3 left-3"
           color={myAgent?.state === "matched" ? C.green : C.orange}
@@ -393,12 +513,13 @@ function GodView({
         </div>
         <div className="flex-1 overflow-y-auto">
           {events.slice(0, 25).map((ev, i) => (
-            <div
+            <button
               key={ev.id}
-              className="px-3 py-1.5 border-b border-[#130908] transition"
+              onClick={() => onSelectReason(ev)}
+              className="w-full text-left px-3 py-1.5 border-b border-[#130908] transition hover:bg-[#1a0e08] cursor-pointer"
               style={{
                 opacity: Math.max(0.2, 1 - i * 0.032),
-                background: ev.isMyAgent ? "rgba(255,208,96,.05)" : "transparent",
+                background: ev.isMyAgent ? "rgba(255,208,96,.05)" : undefined,
               }}
             >
               {ev.isMyAgent ? (
@@ -442,10 +563,90 @@ function GodView({
                   </div>
                 </>
               )}
-            </div>
+            </button>
           ))}
         </div>
       </aside>
+    </>
+  );
+}
+
+/* ───────────────────── REASON MODAL ───────────────────── */
+function ReasonModal({
+  ev,
+  onClose,
+}: {
+  ev: MatchEvent;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-[420px] max-w-[92vw] bg-pixel-bg2 border-2 rounded-md p-5 shadow-pixel-glow"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          borderColor: ev.isMyAgent ? `${C.gold}80` : C.border,
+        }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <span className="font-mono text-[9px] tracking-[0.3em] text-pixel-dim">
+            ── MATCH REASON ──
+          </span>
+          <button
+            onClick={onClose}
+            className="font-mono text-[12px] text-pixel-dim hover:text-pixel-orange"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-mono text-[12px] font-bold" style={{ color: ev.colorA }}>
+            {ev.a}
+          </div>
+          <span className="font-mono text-[10px] text-pixel-border">×</span>
+          <div className="font-mono text-[12px] font-bold" style={{ color: ev.colorB }}>
+            {ev.b}
+          </div>
+        </div>
+        <div className="flex items-center justify-between mb-4 font-mono text-[9px] text-pixel-dim">
+          <span>{ev.typeA}</span>
+          <span>·</span>
+          <span>{ev.typeB}</span>
+        </div>
+        <div
+          className="text-center font-pixel text-4xl mb-3"
+          style={{
+            color:
+              ev.score >= 85 ? C.green : ev.score >= 70 ? C.orange : C.pink,
+          }}
+        >
+          {ev.score}%
+        </div>
+        <div className="bg-pixel-bg border border-pixel-border rounded p-3 mb-2">
+          <div className="font-mono text-[8px] tracking-[0.3em] text-pixel-dim mb-1">
+            FACT
+          </div>
+          <div className="font-mono text-[11px] text-pixel-text/90">
+            {ev.fact}
+          </div>
+        </div>
+        <div className="bg-pixel-bg border border-pixel-border rounded p-3">
+          <div className="font-mono text-[8px] tracking-[0.3em] text-pixel-dim mb-1">
+            COMMENTARY
+          </div>
+          <div className="font-mono text-[11px] text-pixel-text/90">
+            {ev.commentary}
+          </div>
+        </div>
+        {ev.isMyAgent && (
+          <div className="mt-3 text-center font-mono text-[9px] text-pixel-gold tracking-widest">
+            ★ INVOLVES YOUR AGENT
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -454,9 +655,11 @@ function GodView({
 function LiveFeed({
   events,
   myAgent,
+  onSelectReason,
 }: {
   events: MatchEvent[];
   myAgent: Agent | undefined;
+  onSelectReason: (ev: MatchEvent) => void;
 }) {
   const myEvs = events.filter((e) => e.isMyAgent);
   const topScore = myEvs.reduce((m, e) => (e.score > m ? e.score : m), 0);
@@ -501,9 +704,10 @@ function LiveFeed({
           </div>
         )}
         {myEvs.slice(0, 10).map((ev) => (
-          <div
+          <button
             key={ev.id}
-            className="bg-pixel-bg2 border rounded p-3 mb-1.5"
+            onClick={() => onSelectReason(ev)}
+            className="w-full text-left bg-pixel-bg2 border rounded p-3 mb-1.5 hover:bg-[#1a0e08] transition cursor-pointer"
             style={{
               borderColor: ev.score >= 80 ? `${C.gold}40` : C.border,
             }}
@@ -528,7 +732,7 @@ function LiveFeed({
             <div className="font-mono text-[8px] text-[#6a4030] italic">
               "{ev.fact}"
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -539,9 +743,10 @@ function LiveFeed({
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {events.slice(0, 18).map((ev) => (
-            <div
+            <button
               key={ev.id}
-              className="bg-pixel-bg2 border rounded p-3"
+              onClick={() => onSelectReason(ev)}
+              className="w-full text-left bg-pixel-bg2 border rounded p-3 hover:bg-[#1a0e08] transition cursor-pointer"
               style={{
                 borderColor: ev.isMyAgent ? `${C.gold}50` : C.border,
               }}
@@ -574,7 +779,7 @@ function LiveFeed({
                   ★ your agent
                 </div>
               )}
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -853,152 +1058,4 @@ function Box({
       {children}
     </div>
   );
-}
-
-/* ───────────────────── canvas world drawing ───────────────────── */
-function drawWorld(
-  ctx: CanvasRenderingContext2D,
-  agents: Agent[],
-  frame: number,
-) {
-  ctx.fillStyle = C.bg;
-  ctx.fillRect(0, 0, CW, CH);
-  ctx.strokeStyle = "#190d07";
-  ctx.lineWidth = 0.5;
-  for (let x = 0; x <= CW; x += 30) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, CH);
-    ctx.stroke();
-  }
-  for (let y = 0; y <= CH; y += 30) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(CW, y);
-    ctx.stroke();
-  }
-  for (let i = 0; i < 40; i++) {
-    const sx = (i * 137.508 + 23) % CW | 0;
-    const sy = (i * 97.314 + 17) % CH | 0;
-    const blink = Math.sin(frame * 0.04 + i * 1.73) > 0.15;
-    if (!blink) continue;
-    const sc = C.orange + (i % 3 === 0 ? "55" : i % 3 === 1 ? "40" : "30");
-    ctx.fillStyle = sc;
-    if (i % 4 === 0) {
-      ctx.fillRect(sx, sy, 2, 2);
-      ctx.fillRect(sx - 3, sy, 1, 2);
-      ctx.fillRect(sx + 3, sy, 1, 2);
-      ctx.fillRect(sx, sy - 3, 2, 1);
-      ctx.fillRect(sx, sy + 3, 2, 1);
-    } else {
-      ctx.fillRect(sx, sy, 2, 2);
-    }
-  }
-  const vg = ctx.createRadialGradient(
-    CW / 2,
-    CH / 2,
-    CH * 0.25,
-    CW / 2,
-    CH / 2,
-    CH * 0.9,
-  );
-  vg.addColorStop(0, "rgba(0,0,0,0)");
-  vg.addColorStop(1, "rgba(0,0,0,.65)");
-  ctx.fillStyle = vg;
-  ctx.fillRect(0, 0, CW, CH);
-
-  const done = new Set<number>();
-  agents.forEach((a) => {
-    if (a.state !== "matched" || a.matchId == null || done.has(a.id)) return;
-    const b = agents.find((x) => x.id === a.matchId);
-    if (!b) return;
-    done.add(a.id);
-    done.add(b.id);
-    const col = a.isMe || b.isMe ? C.gold : C.orange;
-    ctx.save();
-    ctx.setLineDash([5, 5]);
-    ctx.lineDashOffset = -((frame * 1.8) % 18);
-    ctx.strokeStyle = col + "55";
-    ctx.lineWidth = a.isMe || b.isMe ? 2 : 1;
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.stroke();
-    ctx.restore();
-    const mx = (a.x + b.x) / 2;
-    const my = (a.y + b.y) / 2;
-    const hp = 0.6 + 0.4 * Math.sin(frame * 0.12);
-    ctx.font = `${11 + hp * 2}px sans-serif`;
-    ctx.fillStyle = col;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("♥", mx, my - 2);
-    ctx.font = "bold 8px monospace";
-    ctx.fillStyle = col + "cc";
-    ctx.fillText(`${a.score}%`, mx, my + 11);
-  });
-
-  const sorted = [
-    ...agents.filter((a) => !a.isMe),
-    ...agents.filter((a) => a.isMe),
-  ];
-  const GN = 2;
-  const GM = 3;
-  sorted.forEach((a) => {
-    const col = a.isMe ? C.gold : a.type.color;
-    if (a.state === "matched") {
-      const p = 0.4 + 0.6 * Math.sin(frame * 0.1);
-      const gr = a.isMe ? 5 * GM + 3 : 5 * GN + 4;
-      ctx.beginPath();
-      ctx.arc(a.x, a.y, gr + p * 5, 0, Math.PI * 2);
-      ctx.fillStyle = col + "18";
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(a.x, a.y, gr, 0, Math.PI * 2);
-      ctx.strokeStyle = col + "50";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-    }
-    if (a.isMe) {
-      const pr = (frame * 1.3) % 110;
-      ctx.beginPath();
-      ctx.arc(a.x, a.y, pr, 0, Math.PI * 2);
-      const alpha = Math.max(0, Math.floor((1 - pr / 110) * 110))
-        .toString(16)
-        .padStart(2, "0");
-      ctx.strokeStyle = C.gold + alpha;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-    const gs = a.isMe ? GM : GN;
-    ctx.globalAlpha = a.state === "matched" ? 1 : 0.85;
-    drawGhost(
-      ctx,
-      a.x,
-      a.y,
-      col,
-      gs,
-      a.state === "matched" ? GHOST_WINK : GHOST_NORMAL,
-    );
-    ctx.globalAlpha = 1;
-    if (a.state === "matched" && a.isMe) {
-      const hf = 0.5 + 0.5 * Math.sin(frame * 0.18);
-      ctx.font = `${12 + hf * 3}px sans-serif`;
-      ctx.fillStyle = C.gold;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.fillText("♥", a.x, a.y - 6 * gs - 8 - hf * 3);
-    }
-    if (a.isMe) {
-      ctx.font = "bold 9px monospace";
-      ctx.fillStyle = C.gold;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.fillText("YOU ▾", a.x, a.y - 6 * GM - 5);
-    }
-  });
-  ctx.fillStyle = "rgba(0,0,0,.04)";
-  for (let y = 0; y < CH; y += 2) ctx.fillRect(0, y, CW, 1);
-  // unused vars for type checking
-  void MY_ID;
 }
