@@ -7,6 +7,7 @@ import { PixelButton, PixelPanel, PixelStat } from "@/components/pixel/PixelUI";
 import { PixelWorldCanvas } from "@/components/pixel/PixelWorldCanvas";
 import { VerandaLogo } from "@/components/pixel/VerandaLogo";
 import { AGENT_TYPES } from "@/lib/pixel-world";
+import WalletConnectButton from "@/components/WalletConnectButton";
 
 const HAS_PRIVY = !!process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
@@ -36,6 +37,9 @@ export default function LandingPage() {
           <div className="flex items-center gap-2 font-mono text-[10px] text-pixel-dim">
             <span className="w-1.5 h-1.5 rounded-full bg-pixel-green animate-livePulse" />
             <span className="text-pixel-green">SOLANA · DEVNET</span>
+            {HAS_PRIVY && (
+              <WalletConnectButton compact className="ml-3" />
+            )}
           </div>
         </div>
       </div>

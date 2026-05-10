@@ -15,10 +15,17 @@ export default function PrivyProviderInner({
       appId={appId}
       config={{
         embeddedWallets: { createOnLogin: "users-without-wallets" },
-        loginMethods: ["email", "google"],
+        loginMethods: ["wallet", "email", "google"],
         appearance: {
           theme: "light",
           accentColor: "#0E0B16",
+          showWalletLoginFirst: true,
+          walletChainType: "solana-only",
+          walletList: [
+            "detected_solana_wallets",
+            "phantom",
+            "wallet_connect",
+          ],
         },
         externalWallets: {
           solana: { connectors: toSolanaWalletConnectors() },
