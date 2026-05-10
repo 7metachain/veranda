@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getOrCreateAgentWallet } from "@/lib/agent-wallet";
+import WalletConnectButton from "./WalletConnectButton";
 
 const HAS_PRIVY = !!process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
@@ -14,12 +15,12 @@ function WithPrivy() {
   // (We can't conditionally `useState` inside one component, so we split.)
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { usePrivy, useWallets } = require("@privy-io/react-auth");
-  const { user } = usePrivy();
+  const { user, ready, authenticated } = usePrivy();
   const { wallets } = useWallets();
   const [agent, setAgent] = useState<string | null>(null);
 
   const real =
-    wallets.find((w: any) => w.walletClientType === "privy")?.address ??
+    wallets.find((w: any) => w.address)?.address ??
     user?.wallet?.address ??
     null;
 
@@ -27,7 +28,19 @@ function WithPrivy() {
     getOrCreateAgentWallet().then((w) => setAgent(w.publicKey));
   }, []);
 
-  return <Pills real={real} agent={agent} />;
+  return (
+    <Pills
+      real={
+        ready
+          ? authenticated
+            ? real
+            : "(wallet not connected)"
+          : "(loading wallet state)"
+      }
+      agent={agent}
+      action={<WalletConnectButton showSignOut />}
+    />
+  );
 }
 
 function DevMode() {
@@ -46,14 +59,17 @@ function DevMode() {
 function Pills({
   real,
   agent,
+  action,
 }: {
   real: string | null;
   agent: string | null;
+  action?: React.ReactNode;
 }) {
   return (
     <div className="border border-veranda-ink/10 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
       <Pill label="Real wallet" value={real} />
       <Pill label="Agent wallet" value={agent} />
+      {action && <div className="col-span-full">{action}</div>}
       <p className="text-veranda-ink/50 text-xs col-span-full">
         Server only knows the agent wallet. Real ↔ agent linkage stays in your
         browser as a Poseidon commitment.
