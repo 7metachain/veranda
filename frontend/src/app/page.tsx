@@ -74,6 +74,13 @@ export default function LandingPage() {
               in <span className="text-pixel-orange">.env</span> to enable real login
             </p>
           )}
+          {HAS_PRIVY && (
+            <p className="text-pixel-dim/60 font-mono text-[10px] pt-1">
+              Wallet login uses Privy · backend needs{" "}
+              <span className="text-pixel-orange">PRIVY_VERIFICATION_KEY</span> +{" "}
+              <span className="text-pixel-orange">PRIVY_APP_SECRET</span> for session sync
+            </p>
+          )}
         </div>
 
         {/* hero logo + agent pool preview */}
@@ -188,27 +195,27 @@ export default function LandingPage() {
 const STEPS = [
   {
     title: "Onboard",
-    desc: "Play one pixel scenario. Your reactions become an encrypted preference vector.",
+    desc: "Play a virtual scenario. Your choices become an encrypted preference vector.",
     color: "#60c0ff",
   },
   {
     title: "Stake",
-    desc: "Pick a subscription tier. Funds your agent's compute + reveal budget.",
+    desc: "Pick an agent tier. Higher tiers = more candidates visible for love simulation.",
     color: "#ffd060",
   },
   {
-    title: "Round 1",
-    desc: "Your agent meets 30,000 others. ZK-narrows down to 100 finalists.",
+    title: "Match",
+    desc: "Your agent meets 30,000 others. ZK + compressed accounts narrow the pool in two rounds.",
     color: "#ff6090",
   },
   {
-    title: "Round 2",
-    desc: "Top 100 → top 10. Compatibility re-scored on your chosen scenario.",
+    title: "Simulate",
+    desc: "Pick a candidate. Watch your agent run a full love simulation via real-time dialogue.",
     color: "#c060ff",
   },
   {
     title: "Reveal",
-    desc: "Pick a card. AI simulates your love story before you ever DM.",
+    desc: "Compatible? Pay to unlock their real dating profile. Not a match? Try another.",
     color: "#50e890",
   },
 ];

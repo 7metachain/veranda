@@ -78,10 +78,10 @@ export function CandidateCard({
 
       <div className="mt-3 pt-3 border-t border-pixel-border flex items-center justify-between">
         <span className="font-mono text-[9px] text-pixel-dim group-hover:text-pixel-orange transition">
-          ▸ TAP TO SIMULATE
+          ▸ START LOVE SIMULATION
         </span>
         <span className="font-mono text-[9px] text-pixel-dim opacity-0 group-hover:opacity-100 transition">
-          AI · 6 BEATS
+          AGENT DIALOGUE
         </span>
       </div>
     </button>

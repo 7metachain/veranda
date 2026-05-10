@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   PixelDiningScene,
   type ScenarioChoice,
@@ -42,7 +41,6 @@ const VIBES = [
 const TRAITS = ["logic", "empathy", "creativity", "ambition", "humor"] as const;
 
 export default function OnboardingPage() {
-  const router = useRouter();
   const [stage, setStage] = useState<Stage>("scene");
   const [choices, setChoices] = useState<ScenarioChoice[]>([]);
   const [traits, setTraits] = useState<Record<(typeof TRAITS)[number], number> | null>(
@@ -99,11 +97,11 @@ export default function OnboardingPage() {
       "veranda:selected_scenarios",
       JSON.stringify(["casual_dining"]),
     );
-    router.push("/deposit");
+    window.location.assign("/deposit");
   };
 
   return (
-    <main className="min-h-screen pixel-grid-bg">
+    <main className="min-h-screen pixel-grid-bg pb-28">
       <Header stage={stage} />
 
       <div className="max-w-3xl mx-auto px-6 py-10 space-y-8">
@@ -235,53 +233,150 @@ export default function OnboardingPage() {
                 <div className="space-y-3">
                   <div>
                     <p className="font-pixel text-2xl text-pixel-gold leading-none">
-                      {profile.display_name || "Anonymous"}
+                      {profile.display_name || (
+                        <span className="text-pixel-dim italic">
+                          (no display name)
+                        </span>
+                      )}
                     </p>
-                    <p className="font-mono text-[11px] text-pixel-dim mt-1">
-                      {[profile.age, profile.pronouns, profile.city]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
+                    {[profile.age, profile.pronouns, profile.city].some(
+                      Boolean,
+                    ) && (
+                      <p className="font-mono text-[11px] text-pixel-dim mt-1">
+                        {[profile.age, profile.pronouns, profile.city]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    )}
                   </div>
                   <p className="font-mono text-sm text-pixel-text/80">
-                    {profile.bio}
+                    {profile.bio || (
+                      <span className="text-pixel-dim italic">
+                        (no bio)
+                      </span>
+                    )}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
-                    {profile.vibes.map((v) => (
+                    {profile.vibes.length === 0 ? (
+                      <span className="font-mono text-[10px] text-pixel-dim italic">
+                        (no vibes selected)
+                      </span>
+                    ) : (
+                      profile.vibes.map((v) => (
+                        <span
+                          key={v}
+                          className="font-mono text-[10px] px-2 py-0.5 rounded border border-pixel-orange text-pixel-gold"
+                        >
+                          #{v}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Step-2 details — explicit field-by-field echo so the user
+                  can confirm every input before encrypting. */}
+              <PixelDivider label="PROFILE DETAILS · STEP 2" />
+              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+                <ReviewField label="Display name" value={profile.display_name} />
+                <ReviewField label="Age" value={profile.age} />
+                <ReviewField label="Pronouns" value={profile.pronouns} />
+                <ReviewField label="City" value={profile.city} />
+              </div>
+              <div className="mt-3">
+                <span className="font-mono text-[9px] tracking-[0.3em] text-pixel-dim uppercase">
+                  Short bio
+                </span>
+                <p className="font-mono text-[12px] text-pixel-text/80 mt-1 whitespace-pre-wrap">
+                  {profile.bio || (
+                    <span className="text-pixel-dim italic">— not provided —</span>
+                  )}
+                </p>
+              </div>
+              <div className="mt-3">
+                <span className="font-mono text-[9px] tracking-[0.3em] text-pixel-dim uppercase">
+                  Vibes ({profile.vibes.length})
+                </span>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {profile.vibes.length === 0 ? (
+                    <span className="font-mono text-[11px] text-pixel-dim italic">
+                      — none selected —
+                    </span>
+                  ) : (
+                    profile.vibes.map((v) => (
                       <span
                         key={v}
                         className="font-mono text-[10px] px-2 py-0.5 rounded border border-pixel-orange text-pixel-gold"
                       >
                         #{v}
                       </span>
-                    ))}
-                  </div>
+                    ))
+                  )}
                 </div>
               </div>
 
-              <PixelDivider label="ENCRYPTED PREFERENCE VECTOR" />
+              {/* Step-1 dinner-date scene recap — explicit answers and the
+                  derived tags so the user sees exactly what was captured. */}
+              <PixelDivider label="DINNER-DATE CHOICES · STEP 1" />
+              {choices.length === 0 ? (
+                <p className="font-mono text-[11px] text-pixel-dim italic">
+                  — no scene answers on file —
+                </p>
+              ) : (
+                <ol className="space-y-2">
+                  {choices.map((c, i) => (
+                    <li key={c.id} className="flex items-start gap-2">
+                      <span className="font-pixel text-pixel-orange shrink-0">
+                        {i + 1}.
+                      </span>
+                      <div className="flex-1">
+                        <p className="font-mono text-[12px] text-pixel-text/80 leading-snug">
+                          {c.label.replace(/^▸\s*/, "")}
+                        </p>
+                        <span className="font-mono text-[10px] text-pixel-dim">
+                          → tag: <span className="text-pixel-gold">#{c.tag}</span>
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+
+              <PixelDivider label="ENCRYPTED PREFERENCE VECTOR · DERIVED" />
               <TraitBars traits={traits} />
 
               <PixelDivider label="SCENARIO TAGS" />
               <div className="flex flex-wrap gap-1.5">
-                {tags.map((t) => (
-                  <span
-                    key={t}
-                    className="font-mono text-[10px] px-2 py-0.5 rounded border border-pixel-border text-pixel-dim"
-                  >
-                    {t}
+                {tags.length === 0 ? (
+                  <span className="font-mono text-[11px] text-pixel-dim italic">
+                    — none —
                   </span>
-                ))}
+                ) : (
+                  tags.map((t) => (
+                    <span
+                      key={t}
+                      className="font-mono text-[10px] px-2 py-0.5 rounded border border-pixel-border text-pixel-dim"
+                    >
+                      #{t}
+                    </span>
+                  ))
+                )}
               </div>
             </PixelPanel>
 
-            <div className="flex justify-between gap-3">
-              <PixelButton variant="ghost" onClick={() => setStage("profile")}>
-                ← Back to details
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 relative z-10">
+              <PixelButton variant="ghost" onClick={() => setStage("scene")}>
+                ← Replay scenario
               </PixelButton>
-              <PixelButton onClick={handleSubmit}>
-                Encrypt & continue → fund agent
-              </PixelButton>
+              <div className="flex flex-col-reverse sm:flex-row gap-3 sm:items-center">
+                <PixelButton variant="ghost" onClick={() => setStage("profile")}>
+                  ← Back to details
+                </PixelButton>
+                <PixelButton type="button" onClick={handleSubmit}>
+                  Encrypt & continue → fund agent
+                </PixelButton>
+              </div>
             </div>
           </>
         )}
@@ -419,6 +514,25 @@ function TraitBars({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** Read-only label/value row used on the step-3 confirm page so the
+ *  user sees every step-2 field, including ones they left empty. */
+function ReviewField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span className="font-mono text-[9px] tracking-[0.3em] text-pixel-dim uppercase">
+        {label}
+      </span>
+      <p
+        className={`font-mono text-[12px] mt-0.5 ${
+          value ? "text-pixel-text/90" : "text-pixel-dim italic"
+        }`}
+      >
+        {value || "— not provided —"}
+      </p>
     </div>
   );
 }

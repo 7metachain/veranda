@@ -2,6 +2,7 @@
 
 import { PrivyProvider } from "@privy-io/react-auth";
 import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
+import { PrivySessionBridge } from "./PrivySessionBridge";
 
 export default function PrivyProviderInner({
   appId,
@@ -15,10 +16,10 @@ export default function PrivyProviderInner({
       appId={appId}
       config={{
         embeddedWallets: { createOnLogin: "users-without-wallets" },
-        loginMethods: ["email", "google"],
+        loginMethods: ["wallet", "email", "google"],
         appearance: {
-          theme: "light",
-          accentColor: "#0E0B16",
+          theme: "dark",
+          accentColor: "#e8724a",
         },
         externalWallets: {
           solana: { connectors: toSolanaWalletConnectors() },
@@ -26,6 +27,7 @@ export default function PrivyProviderInner({
       }}
     >
       {children}
+      <PrivySessionBridge />
     </PrivyProvider>
   );
 }
