@@ -3,8 +3,15 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CandidateCard } from "@/components/CandidateCard";
-import { DisclosurePayment } from "@/components/DisclosurePayment";
 import { CeremonyVideo } from "@/components/CeremonyVideo";
+import { DisclosurePayment } from "@/components/DisclosurePayment";
+import { RomanceSimulator } from "@/components/pixel/RomanceSimulator";
+import { PixelGhost } from "@/components/pixel/PixelGhost";
+import {
+  PixelButton,
+  PixelDivider,
+  PixelPanel,
+} from "@/components/pixel/PixelUI";
 import { api, type CandidateBrief, type DisclosedProfile } from "@/lib/api";
 
 const MOCK_TEASERS = [
@@ -34,10 +41,23 @@ function CandidatesPageInner() {
   const sessionId = params.get("session");
 
   const [candidates, setCandidates] = useState<CandidateBrief[]>([]);
-  const [picked, setPicked] = useState<CandidateBrief | null>(null);
+  const [simulating, setSimulating] = useState<CandidateBrief | null>(null);
+  const [scenario, setScenario] = useState<string>("casual_dining");
+  const [paymentTarget, setPaymentTarget] = useState<CandidateBrief | null>(null);
   const [disclosed, setDisclosed] = useState<DisclosedProfile | null>(null);
   const [ceremonyUrl, setCeremonyUrl] = useState<string | null>(null);
   const [mockMode, setMockMode] = useState(false);
+
+  // Read scenario from onboarding (defaults to casual_dining).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("veranda:selected_scenarios");
+      const arr = raw ? (JSON.parse(raw) as string[]) : [];
+      if (arr[0]) setScenario(arr[0]);
+    } catch {
+      /* noop */
+    }
+  }, []);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -69,57 +89,149 @@ function CandidatesPageInner() {
       const ceremony = await api.triggerCeremony(agentWallet);
       setCeremonyUrl(ceremony.video_url);
     } catch {
-      // backend offline — fall through, no ceremony video shown
+      // backend offline — no ceremony video
     }
   };
 
-  if (!sessionId) {
-    return <main className="p-12">Missing session id.</main>;
-  }
+  if (!sessionId)
+    return (
+      <main className="p-12 font-mono text-pixel-orange">
+        Missing session id.
+      </main>
+    );
 
   return (
-    <main className="min-h-screen px-6 py-16 max-w-5xl mx-auto space-y-10">
-      <header>
-        <p className="text-veranda-gold uppercase tracking-[0.4em] text-xs">
-          Top 10 {mockMode && "· demo"}
+    <main className="min-h-screen pixel-grid-bg">
+      {/* HEADER */}
+      <div className="border-b border-pixel-border bg-pixel-bg2/60">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <PixelGhost color="#ffd060" scale={3} floaty />
+            <div>
+              <p className="font-mono text-[9px] tracking-[0.4em] text-pixel-dim">
+                ROUND 2 · TOP 10 FINALISTS
+              </p>
+              <p className="font-pixel text-2xl text-pixel-gold leading-none">
+                YOUR SHORTLIST
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <span className="font-mono text-[9px] tracking-[0.4em] text-pixel-dim">
+              SCENARIO
+            </span>
+            <span
+              className="font-mono text-[11px] px-2 py-1 border border-pixel-border rounded text-pixel-orange uppercase"
+            >
+              {scenario.replace(/_/g, " ")}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* INTRO */}
+      <section className="max-w-6xl mx-auto px-6 py-8 text-center space-y-2">
+        <p className="font-mono text-[10px] tracking-[0.5em] text-pixel-orange">
+          ── SIMULATE BEFORE YOU REVEAL ──
         </p>
-        <h1 className="font-display text-5xl mt-2">Your final candidates.</h1>
-        <p className="text-veranda-ink/60 mt-2">
-          Tap a card to reveal who they are. $2 USDC each.
-        </p>
+        <h1 className="font-pixel text-4xl md:text-5xl text-pixel-text leading-tight">
+          Tap a card. AI plays out{" "}
+          <span className="text-pixel-gold">
+            your {scenario.replace(/_/g, " ")} scene
+          </span>{" "}
+          with both agents' encrypted preferences. No PII leaves the rollup.
+        </h1>
         {mockMode && (
-          <p className="text-veranda-ink/40 text-xs mt-2">
-            Backend offline — showing a stub gallery so you can preview the
-            disclosure flow.
+          <p className="font-mono text-[10px] text-pixel-dim mt-1">
+            Backend offline — running a stub gallery with mock candidates.
           </p>
         )}
-      </header>
+      </section>
 
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {candidates.map((c) => (
+      {/* TOP 1 hero */}
+      {candidates[0] && (
+        <section className="max-w-6xl mx-auto px-6 pb-4">
+          <PixelPanel title="TOP MATCH" accent="#ffd060">
+            <div className="grid sm:grid-cols-[auto_1fr_auto] gap-5 items-center">
+              <PixelGhost color="#ffd060" scale={5} floaty />
+              <div>
+                <p className="font-mono text-[10px] tracking-[0.4em] text-pixel-dim">
+                  RANK #01 · ENCRYPTED MATCH
+                </p>
+                <p className="font-pixel text-5xl text-pixel-gold leading-none my-1">
+                  {(candidates[0].score / 100).toFixed(1)}%
+                </p>
+                <p className="font-mono text-sm text-pixel-text/80">
+                  {candidates[0].teaser}
+                </p>
+              </div>
+              <PixelButton onClick={() => setSimulating(candidates[0]!)}>
+                ▶ Simulate this date
+              </PixelButton>
+            </div>
+          </PixelPanel>
+        </section>
+      )}
+
+      {/* GRID */}
+      <section className="max-w-6xl mx-auto px-6 pb-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {candidates.slice(1).map((c, i) => (
           <CandidateCard
             key={c.index}
             candidate={c}
-            onClick={() => setPicked(c)}
+            rank={i + 1}
+            onClick={() => setSimulating(c)}
           />
         ))}
       </section>
 
-      {picked && !disclosed && sessionId && (
+      {/* SIMULATION MODAL */}
+      {simulating && (
+        <RomanceSimulator
+          candidate={simulating}
+          scenarioId={scenario}
+          onClose={() => setSimulating(null)}
+          onUnlock={() => {
+            const c = simulating;
+            setSimulating(null);
+            setPaymentTarget(c);
+          }}
+        />
+      )}
+
+      {/* PAYMENT MODAL */}
+      {paymentTarget && !disclosed && sessionId && (
         <DisclosurePayment
           sessionId={sessionId}
-          candidate={picked}
-          onClose={() => setPicked(null)}
+          candidate={paymentTarget}
+          onClose={() => setPaymentTarget(null)}
           onDisclosed={onDisclosed}
           mockMode={mockMode}
         />
       )}
 
+      {/* REVEAL */}
       {disclosed && (
-        <section className="border-t border-veranda-ink/10 pt-10 space-y-6">
-          <h2 className="font-display text-3xl">{disclosed.display_name}</h2>
-          <p className="text-veranda-ink/70">{disclosed.bio}</p>
-          {ceremonyUrl && <CeremonyVideo url={ceremonyUrl} />}
+        <section className="max-w-3xl mx-auto px-6 py-12">
+          <PixelPanel title="REVEAL · IDENTITY UNLOCKED" accent="#50e890">
+            <div className="grid sm:grid-cols-[auto_1fr] gap-5 items-start">
+              <PixelGhost color="#50e890" scale={5} />
+              <div className="space-y-2">
+                <p className="font-pixel text-3xl text-pixel-text leading-none">
+                  {disclosed.display_name}
+                </p>
+                <p className="font-mono text-sm text-pixel-text/80">
+                  {disclosed.bio}
+                </p>
+              </div>
+            </div>
+            {ceremonyUrl && (
+              <>
+                <PixelDivider label="CEREMONY · GENERATED FOR YOU" />
+                <CeremonyVideo url={ceremonyUrl} />
+              </>
+            )}
+          </PixelPanel>
         </section>
       )}
     </main>
@@ -128,7 +240,11 @@ function CandidatesPageInner() {
 
 export default function CandidatesPage() {
   return (
-    <Suspense fallback={<main className="p-12">Loading…</main>}>
+    <Suspense
+      fallback={
+        <main className="p-12 font-mono text-pixel-orange">Loading…</main>
+      }
+    >
       <CandidatesPageInner />
     </Suspense>
   );

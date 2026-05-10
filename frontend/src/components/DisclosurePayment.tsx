@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { api, type CandidateBrief, type DisclosedProfile } from "@/lib/api";
 import { signRequestDisclosureTx } from "@/lib/anchor-client";
+import { PixelButton } from "./pixel/PixelUI";
+import { PixelGhost } from "./pixel/PixelGhost";
 
 const MOCK_NAMES = [
   "Aria Chen",
@@ -62,7 +64,6 @@ export function DisclosurePayment({
       setErr(null);
 
       if (mockMode) {
-        // Demo mode: skip the real on-chain tx + backend roundtrip.
         await new Promise((r) => setTimeout(r, 800));
         onDisclosed(buildMockProfile(candidate), candidate.agent_wallet);
         onClose();
@@ -89,38 +90,51 @@ export function DisclosurePayment({
 
   return (
     <div
-      className="fixed inset-0 bg-veranda-ink/40 flex items-center justify-center z-50"
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="bg-veranda-fog rounded-3xl p-10 max-w-md w-[90%] space-y-5"
+        className="bg-pixel-bg border-2 border-pixel-orange rounded-md max-w-md w-full p-6 space-y-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="font-display text-3xl">Reveal candidate?</h3>
-        <p className="text-veranda-ink/60">
-          You'll pay <strong>$2 USDC</strong> from your escrow. The candidate
-          stays anonymous to other users.
+        <div className="flex items-center gap-3">
+          <PixelGhost color="#ffd060" scale={4} />
+          <div>
+            <p className="font-mono text-[9px] tracking-[0.4em] text-pixel-dim">
+              REVEAL CANDIDATE
+            </p>
+            <p className="font-pixel text-2xl text-pixel-gold leading-none">
+              UNLOCK IDENTITY
+            </p>
+          </div>
+        </div>
+
+        <p className="font-mono text-sm text-pixel-text/80 leading-relaxed">
+          You'll pay{" "}
+          <span className="text-pixel-gold font-bold">$2 USDC</span> from your
+          escrow. Your candidate stays anonymous to other users until they too
+          accept.
         </p>
+
         {mockMode && (
-          <p className="text-veranda-ink/40 text-xs">
-            Demo mode — no real tx will be signed.
+          <p className="font-mono text-[10px] text-pixel-dim border border-pixel-border rounded px-3 py-2">
+            ⚠ DEMO MODE — no real tx will be signed.
           </p>
         )}
-        {err && <p className="text-red-700 text-sm">{err}</p>}
-        <div className="flex gap-3">
-          <button
-            onClick={onConfirm}
-            disabled={busy}
-            className="flex-1 px-6 py-3 rounded-full bg-veranda-ink text-veranda-fog disabled:opacity-50"
-          >
-            {busy ? "Signing…" : mockMode ? "Confirm (demo)" : "Confirm $2"}
-          </button>
-          <button
-            onClick={onClose}
-            className="px-6 py-3 rounded-full border border-veranda-ink/20"
-          >
+
+        {err && (
+          <p className="font-mono text-[11px] text-pixel-pink border border-pixel-pink/50 rounded px-3 py-2">
+            {err}
+          </p>
+        )}
+
+        <div className="flex gap-2 justify-end pt-2">
+          <PixelButton variant="ghost" onClick={onClose}>
             Cancel
-          </button>
+          </PixelButton>
+          <PixelButton onClick={onConfirm} disabled={busy}>
+            {busy ? "Signing…" : mockMode ? "Confirm (demo)" : "Confirm $2"}
+          </PixelButton>
         </div>
       </div>
     </div>

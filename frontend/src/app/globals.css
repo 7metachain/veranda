@@ -1,13 +1,119 @@
+@import url("https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --veranda-ink: #0e0b16;
-  --veranda-fog: #f7f5ee;
+/* ─────────────────────────────────────────────────────────────────────
+   THEME TOKENS
+   Each color is exposed as an RGB triplet (no commas) so Tailwind's
+   `rgb(var(--token) / <alpha-value>)` syntax can layer alpha on top.
+   - default :root  = DARK (warm CRT terminal)
+   - [data-theme="light"] = LIGHT (warm cream paper, retro arcade)
+   ───────────────────────────────────────────────────────────────────── */
+:root,
+[data-theme="dark"] {
+  --pixel-bg: 13 8 6;          /* #0d0806 */
+  --pixel-bg2: 17 11 7;        /* #110b07 */
+  --pixel-panel: 22 13 8;      /* #160d08 */
+  --pixel-border: 45 24 8;     /* #2d1808 */
+  --pixel-dim: 122 80 64;      /* #7a5040 */
+  --pixel-text: 240 208 176;   /* #f0d0b0 */
+  --pixel-orange: 232 114 74;  /* #e8724a */
+  --pixel-gold: 255 208 96;    /* #ffd060 */
+  --pixel-green: 80 232 144;   /* #50e890 */
+  --pixel-pink: 255 96 144;    /* #ff6090 */
+  --pixel-blue: 96 192 255;    /* #60c0ff */
+  --pixel-purple: 192 96 255;  /* #c060ff */
+
+  /* derived helpers */
+  --grid-tint: 232 114 74;     /* orange tint */
+  --grid-alpha: 0.04;
+  --scan-alpha: 0.05;
+  --shadow-glow: 0 0 12px rgba(255, 208, 96, 0.35);
+
+  color-scheme: dark;
 }
 
-html, body {
-  background: var(--veranda-fog);
-  color: var(--veranda-ink);
+[data-theme="light"] {
+  /* Warm cream paper / retro arcade light theme. Deeper accents so the
+     pixel sprites still pop on a bright background. */
+  --pixel-bg: 247 241 226;     /* #f7f1e2 cream paper */
+  --pixel-bg2: 240 232 213;    /* #f0e8d5 */
+  --pixel-panel: 252 246 232;  /* #fcf6e8 lifted panel */
+  --pixel-border: 199 138 90;  /* #c78a5a tan border */
+  --pixel-dim: 138 96 64;      /* #8a6040 muted brown */
+  --pixel-text: 42 24 8;       /* #2a1808 dark ink */
+  --pixel-orange: 196 80 40;   /* #c45028 deeper terracotta */
+  --pixel-gold: 184 132 24;    /* #b88418 amber */
+  --pixel-green: 32 120 72;    /* #207848 forest */
+  --pixel-pink: 196 56 96;     /* #c43860 raspberry */
+  --pixel-blue: 56 112 184;    /* #3870b8 indigo */
+  --pixel-purple: 128 56 184;  /* #8038b8 violet */
+
+  --grid-tint: 196 80 40;
+  --grid-alpha: 0.07;
+  --scan-alpha: 0.025;
+  --shadow-glow: 0 0 12px rgba(196, 80, 40, 0.28);
+
+  color-scheme: light;
+}
+
+html,
+body {
+  background: rgb(var(--pixel-bg));
+  color: rgb(var(--pixel-text));
+  font-family: "Share Tech Mono", monospace;
+  /* Smooth color crossfade when toggling themes. */
+  transition:
+    background-color 220ms ease,
+    color 220ms ease;
+}
+
+/* Pixel-perfect rendering for canvases & sprites */
+.pixelated,
+canvas.pixelated {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+/* CRT scanlines overlay */
+.crt-scan {
+  position: relative;
+}
+.crt-scan::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, var(--scan-alpha)) 2px,
+    rgba(0, 0, 0, var(--scan-alpha)) 4px
+  );
+}
+
+/* Subtle grid background helper */
+.pixel-grid-bg {
+  background-color: rgb(var(--pixel-bg));
+  background-image:
+    linear-gradient(rgb(var(--grid-tint) / var(--grid-alpha)) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--grid-tint) / var(--grid-alpha)) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgb(var(--pixel-bg));
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--pixel-border));
+  border-radius: 2px;
 }
