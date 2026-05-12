@@ -51,17 +51,22 @@ pub async fn run(
             .compute_compatibility(&blob_a, &blob_b, &weights)
             .await?;
 
-        // Record on the ER. Errors here are non-fatal — we still want to
-        // surface the score in the UI even if the ER tx is in flight.
-        let _ = state
-            .magicblock
-            .record_match(
-                &solana_sdk::pubkey::Pubkey::default(),
-                &solana_sdk::pubkey::Pubkey::default(),
-                score.value,
-                1,
-            )
-            .await;
+        // Record on the ER (MagicBlock JSON-RPC). Errors are non-fatal for UX.
+        if let (Ok(pk_a), Ok(pk_b)) = (
+            agent_wallet.parse::<solana_sdk::pubkey::Pubkey>(),
+            candidate.parse::<solana_sdk::pubkey::Pubkey>(),
+        ) {
+            let _ = state
+                .magicblock
+                .record_match(&pk_a, &pk_b, score.value, 1)
+                .await;
+        } else {
+            tracing::warn!(
+                agent_wallet,
+                candidate,
+                "skip MagicBlock record_match: invalid pubkey"
+            );
+        }
 
         scored.push((candidate.clone(), score.value));
 

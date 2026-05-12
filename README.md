@@ -72,6 +72,13 @@ pnpm dev:frontend
 # http://localhost:3000
 ```
 
+### MagicBlock (Ephemeral Rollup RPC)
+
+Matching sends `record_match` through **MagicBlock’s Solana-compatible JSON-RPC** (`MAGICBLOCK_RPC_URL`, default `https://devnet.magicblock.app`). See [MagicBlock RPC introduction](https://docs.magicblock.gg/api-reference/rpc-api/introduction).
+
+- Health: `GET http://localhost:8080/api/v1/magicblock/health` — returns `latest_blockhash` when the RPC is reachable.
+- Deploy [`veranda-rollup`](./programs/veranda-rollup/) to the ER, fund `PLATFORM_AUTHORITY_KEYPAIR` on that cluster, and keep `MAGICBLOCK_SEND=true` (set `false` to skip `sendTransaction` during local dev).
+
 ### Deploy / demo (when ready)
 
 ```bash
@@ -100,6 +107,7 @@ just demo
 | [Architecture](./docs/ARCHITECTURE.md) | System design and data flow |
 | [ZK design](./docs/ZK_DESIGN.md) | Proof / commitment direction |
 | [Demo](./docs/DEMO.md) | Happy-path walkthrough |
+| [MagicBlock RPC](https://docs.magicblock.gg/api-reference/rpc-api/introduction) | Ephemeral rollup JSON-RPC (same methods as Solana) |
 
 ## Product pricing (model)
 

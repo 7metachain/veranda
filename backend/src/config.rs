@@ -20,6 +20,8 @@ pub struct Config {
 
     pub magicblock_rpc_url: String,
     pub magicblock_ws_url: String,
+    /// When false, skip sending rollup txs (local dev without funded authority).
+    pub magicblock_send_enabled: bool,
 
     pub light_rpc_url: String,
     pub light_merkle_tree_pubkey: Option<Pubkey>,
@@ -78,6 +80,14 @@ impl Config {
                 "MAGICBLOCK_WS_URL",
                 "wss://devnet.magicblock.app",
             ),
+            magicblock_send_enabled: env::var("MAGICBLOCK_SEND")
+                .map(|v| {
+                    matches!(
+                        v.to_ascii_lowercase().as_str(),
+                        "1" | "true" | "yes" | "on"
+                    )
+                })
+                .unwrap_or(true),
 
             light_rpc_url: env_or_default("LIGHT_RPC_URL", ""),
             light_merkle_tree_pubkey: env::var("LIGHT_MERKLE_TREE_PUBKEY")

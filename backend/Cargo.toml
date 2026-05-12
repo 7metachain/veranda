@@ -16,8 +16,8 @@ path = "src/main.rs"
 # CPIs all happen inside the on-chain program itself.
 anchor-lang = { workspace = true }
 solana-sdk = { workspace = true }
+solana-client = { workspace = true }
 # anchor-client = { workspace = true }   # see note above
-# solana-client = { workspace = true }   # see note above
 # spl-token / spl-associated-token-account: only needed by the on-chain
 # program, which has them in its own Cargo.toml.
 

@@ -6,6 +6,7 @@ use crate::AppState;
 pub mod auth;
 pub mod candidates;
 pub mod lifi_proxy;
+pub mod magicblock;
 pub mod matching;
 pub mod profile;
 pub mod x402_middleware;
@@ -22,6 +23,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         // Matching
         .route("/match/start", post(matching::start))
         .route("/match/status/:session_id", get(matching::status))
+        .route("/magicblock/health", get(magicblock::er_health))
         // Candidates
         .route("/candidates/:session_id", get(candidates::list))
         .route(
